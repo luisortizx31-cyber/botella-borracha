@@ -3,7 +3,29 @@ import { useEffect, useState } from 'react'
 const RADIO = 150 // px, distancia del centro a cada participante
 const VUELTAS_MINIMAS = 5 // vueltas completas antes de frenar en el elegido
 const DURACION_MS = 4000
-const CLAVE_GUARDADO = 'botella-borracha:participantes'
+
+const CLAVE_PARTICIPANTES = 'botella-borracha:participantes'
+const CLAVE_MODO = 'botella-borracha:modo'
+const CLAVE_VERDAD = 'botella-borracha:preguntasVerdad'
+const CLAVE_RETO = 'botella-borracha:preguntasReto'
+
+const PREGUNTAS_VERDAD_POR_DEFECTO = [
+  '¿Cuál es tu mayor miedo?',
+  '¿A quién de aquí invitarías primero a una fiesta?',
+  '¿Cuál es la mentira más grande que has dicho?',
+  '¿Qué es lo más vergonzoso que te ha pasado?',
+  '¿A quién admiras más y por qué?',
+  '¿Cuál es tu secreto mejor guardado?',
+]
+
+const RETOS_POR_DEFECTO = [
+  'Imita a alguien del grupo hasta que adivinen quién es.',
+  'Baila sin música durante 30 segundos.',
+  'Déjate tomar una foto haciendo una cara graciosa.',
+  'Habla con acento robótico durante las próximas 2 rondas.',
+  'Cuenta un chiste, si no da risa haces una penitencia.',
+  'Deja que el grupo te peine o te maquille por 1 minuto.',
+]
 
 // Ángulo (en grados, 0 = arriba, sentido horario) del participante i
 // sobre N - el mismo ángulo se usa para dibujarlo en el círculo y para
@@ -13,33 +35,98 @@ function anguloDe(indice, total) {
   return (indice * 360) / total
 }
 
-// Los participantes quedan guardados en el teléfono (localStorage) -
-// no hay servidor ni cuenta, así que al volver a abrir la app siguen
-// ahí tal cual se dejaron la última vez.
-function cargarParticipantesGuardados() {
+// Todo queda guardado en el teléfono (localStorage) - no hay servidor
+// ni cuenta, así que al volver a abrir la app sigue tal cual se dejó.
+function cargarListaGuardada(clave, porDefecto) {
   try {
-    const guardado = localStorage.getItem(CLAVE_GUARDADO)
-    return guardado ? JSON.parse(guardado) : []
+    const guardado = localStorage.getItem(clave)
+    return guardado ? JSON.parse(guardado) : porDefecto
   } catch (err) {
-    console.error('[App] cargarParticipantesGuardados', err)
-    return []
+    console.error('[App] cargarListaGuardada', clave, err)
+    return porDefecto
   }
 }
 
+function cargarModoGuardado() {
+  try {
+    const guardado = localStorage.getItem(CLAVE_MODO)
+    return guardado === 'verdad' || guardado === 'reto' || guardado === 'ambos' ? guardado : 'ambos'
+  } catch (err) {
+    console.error('[App] cargarModoGuardado', err)
+    return 'ambos'
+  }
+}
+
+// Si el modo es "ambos" sortea entre verdad y reto (solo entre las
+// categorías que sí tengan preguntas cargadas) y después sortea una
+// pregunta dentro de esa categoría.
+function elegirPregunta(modo, preguntasVerdad, preguntasReto) {
+  let tipo = modo
+  if (modo === 'ambos') {
+    const disponibles = []
+    if (preguntasVerdad.length > 0) disponibles.push('verdad')
+    if (preguntasReto.length > 0) disponibles.push('reto')
+    if (disponibles.length === 0) return null
+    tipo = disponibles[Math.floor(Math.random() * disponibles.length)]
+  }
+  const lista = tipo === 'verdad' ? preguntasVerdad : preguntasReto
+  if (lista.length === 0) return null
+  const texto = lista[Math.floor(Math.random() * lista.length)]
+  return { tipo, texto }
+}
+
+const OPCIONES_MODO = [
+  { valor: 'verdad', etiqueta: 'Solo Verdad' },
+  { valor: 'reto', etiqueta: 'Solo Reto' },
+  { valor: 'ambos', etiqueta: 'Ambos' },
+]
+
 export default function App() {
-  const [participantes, setParticipantes] = useState(cargarParticipantesGuardados)
+  const [participantes, setParticipantes] = useState(() => cargarListaGuardada(CLAVE_PARTICIPANTES, []))
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [rotacion, setRotacion] = useState(0)
   const [girando, setGirando] = useState(false)
   const [seleccionado, setSeleccionado] = useState(null)
 
+  const [modo, setModo] = useState(cargarModoGuardado)
+  const [preguntasVerdad, setPreguntasVerdad] = useState(() => cargarListaGuardada(CLAVE_VERDAD, PREGUNTAS_VERDAD_POR_DEFECTO))
+  const [preguntasReto, setPreguntasReto] = useState(() => cargarListaGuardada(CLAVE_RETO, RETOS_POR_DEFECTO))
+  const [preguntaActual, setPreguntaActual] = useState(null)
+  const [mostrarConfig, setMostrarConfig] = useState(false)
+  const [nuevaVerdad, setNuevaVerdad] = useState('')
+  const [nuevoReto, setNuevoReto] = useState('')
+
   useEffect(() => {
     try {
-      localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(participantes))
+      localStorage.setItem(CLAVE_PARTICIPANTES, JSON.stringify(participantes))
     } catch (err) {
       console.error('[App] guardar participantes', err)
     }
   }, [participantes])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_MODO, modo)
+    } catch (err) {
+      console.error('[App] guardar modo', err)
+    }
+  }, [modo])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_VERDAD, JSON.stringify(preguntasVerdad))
+    } catch (err) {
+      console.error('[App] guardar preguntas de verdad', err)
+    }
+  }, [preguntasVerdad])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_RETO, JSON.stringify(preguntasReto))
+    } catch (err) {
+      console.error('[App] guardar retos', err)
+    }
+  }, [preguntasReto])
 
   function agregarParticipante(e) {
     e.preventDefault()
@@ -55,6 +142,30 @@ export default function App() {
     setSeleccionado(null)
   }
 
+  function agregarVerdad(e) {
+    e.preventDefault()
+    const texto = nuevaVerdad.trim()
+    if (!texto) return
+    setPreguntasVerdad((prev) => [...prev, texto])
+    setNuevaVerdad('')
+  }
+
+  function quitarVerdad(indice) {
+    setPreguntasVerdad((prev) => prev.filter((_, i) => i !== indice))
+  }
+
+  function agregarReto(e) {
+    e.preventDefault()
+    const texto = nuevoReto.trim()
+    if (!texto) return
+    setPreguntasReto((prev) => [...prev, texto])
+    setNuevoReto('')
+  }
+
+  function quitarReto(indice) {
+    setPreguntasReto((prev) => prev.filter((_, i) => i !== indice))
+  }
+
   function girar() {
     if (girando || participantes.length < 2) return
     const indiceElegido = Math.floor(Math.random() * participantes.length)
@@ -67,19 +178,30 @@ export default function App() {
     if (delta <= 0) delta += 360
 
     setSeleccionado(null)
+    setPreguntaActual(null)
     setGirando(true)
     setRotacion((prev) => prev + VUELTAS_MINIMAS * 360 + delta)
 
     setTimeout(() => {
       setGirando(false)
       setSeleccionado(indiceElegido)
+      setPreguntaActual(elegirPregunta(modo, preguntasVerdad, preguntasReto))
     }, DURACION_MS)
   }
 
   const puedeGirar = participantes.length >= 2 && !girando
 
   return (
-    <div className="flex min-h-svh flex-col items-center gap-6 px-4 py-8 text-white">
+    <div className="relative flex min-h-svh flex-col items-center gap-6 px-4 py-8 text-white">
+      <button
+        type="button"
+        onClick={() => setMostrarConfig(true)}
+        aria-label="Configuración"
+        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-lg"
+      >
+        ⚙️
+      </button>
+
       <div className="text-center">
         <h1 className="text-3xl font-extrabold tracking-tight">🍾 Botella Borracha</h1>
         <p className="mt-1 text-sm text-white/70">Agregá a los participantes y tocá la botella para girar</p>
@@ -191,9 +313,25 @@ export default function App() {
       )}
 
       {seleccionado !== null && !girando && (
-        <div className="rounded-2xl border border-amber-300/40 bg-amber-400/10 px-6 py-3 text-center">
-          <p className="text-xs font-bold uppercase tracking-wide text-amber-300">¡Le tocó a!</p>
-          <p className="text-2xl font-extrabold text-amber-200">{participantes[seleccionado]}</p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-300/40 bg-amber-400/10 px-6 py-4 text-center">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-300">¡Le tocó a!</p>
+            <p className="text-2xl font-extrabold text-amber-200">{participantes[seleccionado]}</p>
+          </div>
+          {preguntaActual ? (
+            <div className="max-w-xs">
+              <p
+                className={`text-[11px] font-bold uppercase tracking-wide ${
+                  preguntaActual.tipo === 'verdad' ? 'text-sky-300' : 'text-rose-300'
+                }`}
+              >
+                {preguntaActual.tipo === 'verdad' ? '💭 Verdad' : '🔥 Reto'}
+              </p>
+              <p className="mt-1 text-base font-semibold text-white">{preguntaActual.texto}</p>
+            </div>
+          ) : (
+            <p className="max-w-xs text-xs text-white/50">Agregá preguntas en ⚙️ Configuración para que aparezcan acá.</p>
+          )}
         </div>
       )}
 
@@ -205,6 +343,106 @@ export default function App() {
         >
           Girar la botella
         </button>
+      )}
+
+      {mostrarConfig && (
+        <div
+          className="fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-8"
+          onClick={() => setMostrarConfig(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-[#2a0f3d] p-5 text-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold">⚙️ Configuración</h2>
+              <button
+                type="button"
+                onClick={() => setMostrarConfig(false)}
+                aria-label="Cerrar configuración"
+                className="text-white/50 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-white/50">Modo de juego</p>
+            <div className="mb-5 flex gap-2">
+              {OPCIONES_MODO.map((op) => (
+                <button
+                  key={op.valor}
+                  type="button"
+                  onClick={() => setModo(op.valor)}
+                  className={`flex-1 rounded-xl px-2 py-2 text-xs font-bold transition-colors ${
+                    modo === op.valor ? 'bg-fuchsia-600 text-white' : 'bg-white/10 text-white/60'
+                  }`}
+                >
+                  {op.etiqueta}
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-sky-300">💭 Preguntas de Verdad</p>
+            <form onSubmit={agregarVerdad} className="mb-2 flex gap-2">
+              <input
+                type="text"
+                value={nuevaVerdad}
+                onChange={(e) => setNuevaVerdad(e.target.value)}
+                placeholder="Nueva pregunta"
+                className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/40 outline-none focus-visible:border-sky-400"
+              />
+              <button type="submit" className="shrink-0 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white">
+                +
+              </button>
+            </form>
+            <ul className="mb-5 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+              {preguntasVerdad.map((texto, i) => (
+                <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/80">
+                  <span>{texto}</span>
+                  <button
+                    type="button"
+                    onClick={() => quitarVerdad(i)}
+                    aria-label={`Quitar pregunta: ${texto}`}
+                    className="shrink-0 text-white/40 hover:text-white"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+              {preguntasVerdad.length === 0 && <li className="text-xs text-white/40">No hay preguntas de verdad.</li>}
+            </ul>
+
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-rose-300">🔥 Retos</p>
+            <form onSubmit={agregarReto} className="mb-2 flex gap-2">
+              <input
+                type="text"
+                value={nuevoReto}
+                onChange={(e) => setNuevoReto(e.target.value)}
+                placeholder="Nuevo reto"
+                className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/40 outline-none focus-visible:border-rose-400"
+              />
+              <button type="submit" className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">
+                +
+              </button>
+            </form>
+            <ul className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+              {preguntasReto.map((texto, i) => (
+                <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/80">
+                  <span>{texto}</span>
+                  <button
+                    type="button"
+                    onClick={() => quitarReto(i)}
+                    aria-label={`Quitar reto: ${texto}`}
+                    className="shrink-0 text-white/40 hover:text-white"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+              {preguntasReto.length === 0 && <li className="text-xs text-white/40">No hay retos.</li>}
+            </ul>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,0 +1,17 @@
+{
+  "name": "Botella Borracha",
+  "short_name": "Botella",
+  "description": "Girá la botella y elegí un participante al azar.",
+  "lang": "es-PE",
+  "start_url": "/botella-borracha/",
+  "scope": "/botella-borracha/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1e0b2e",
+  "theme_color": "#3b0a4d",
+  "icons": [
+    { "src": "/botella-borracha/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/botella-borracha/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/botella-borracha/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

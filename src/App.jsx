@@ -106,6 +106,7 @@ export default function App() {
   const [mostrarConfig, setMostrarConfig] = useState(false)
   const [nuevaVerdad, setNuevaVerdad] = useState('')
   const [nuevoReto, setNuevoReto] = useState('')
+  const [actualizando, setActualizando] = useState(false)
 
   useEffect(() => {
     try {
@@ -222,6 +223,26 @@ export default function App() {
     setPreguntaActual(elegirPregunta(modo, preguntasVerdad, preguntasReto))
   }
 
+  // Como la app instalada corre con service worker, a veces se queda
+  // con la versión vieja guardada. Esto da de baja ese service worker
+  // y borra el caché para forzar que la próxima carga sea 100% nueva.
+  async function actualizarApp() {
+    setActualizando(true)
+    try {
+      if ('serviceWorker' in navigator) {
+        const registros = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registros.map((r) => r.unregister()))
+      }
+      if ('caches' in window) {
+        const claves = await caches.keys()
+        await Promise.all(claves.map((k) => caches.delete(k)))
+      }
+    } catch (err) {
+      console.error('[App] actualizarApp', err)
+    }
+    window.location.reload()
+  }
+
   const puedeGirar = participantes.length >= 2 && !girando
   const verdadActivas = preguntasVerdad.filter((p) => !p.papelera)
   const verdadEnPapelera = preguntasVerdad.filter((p) => p.papelera)
@@ -230,6 +251,16 @@ export default function App() {
 
   return (
     <div className="relative flex min-h-svh flex-col items-center gap-6 px-4 py-8 text-white">
+      <button
+        type="button"
+        onClick={actualizarApp}
+        disabled={actualizando}
+        aria-label="Actualizar la aplicación"
+        className="absolute right-16 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-lg disabled:opacity-50"
+      >
+        {actualizando ? '⏳' : '🔄'}
+      </button>
+
       <button
         type="button"
         onClick={() => setMostrarConfig(true)}

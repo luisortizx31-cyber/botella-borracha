@@ -47,6 +47,14 @@ function cargarListaGuardada(clave, porDefecto) {
   }
 }
 
+// Cada pregunta/reto guarda si está "en papelera": al tocar la × no se
+// borra de una, pasa a la papelera con opción de restaurar, y solo
+// desaparece del todo si la borran también desde ahí.
+function cargarPreguntasGuardadas(clave, porDefecto) {
+  const lista = cargarListaGuardada(clave, porDefecto.map((texto) => ({ texto, papelera: false })))
+  return lista.map((item) => (typeof item === 'string' ? { texto: item, papelera: false } : item))
+}
+
 function cargarModoGuardado() {
   try {
     const guardado = localStorage.getItem(CLAVE_MODO)
@@ -58,21 +66,24 @@ function cargarModoGuardado() {
 }
 
 // Si el modo es "ambos" sortea entre verdad y reto (solo entre las
-// categorías que sí tengan preguntas cargadas) y después sortea una
-// pregunta dentro de esa categoría.
+// categorías que sí tengan preguntas activas) y después sortea una
+// pregunta dentro de esa categoría. Las que están en papelera no entran.
 function elegirPregunta(modo, preguntasVerdad, preguntasReto) {
+  const verdadActivas = preguntasVerdad.filter((p) => !p.papelera)
+  const retoActivas = preguntasReto.filter((p) => !p.papelera)
+
   let tipo = modo
   if (modo === 'ambos') {
     const disponibles = []
-    if (preguntasVerdad.length > 0) disponibles.push('verdad')
-    if (preguntasReto.length > 0) disponibles.push('reto')
+    if (verdadActivas.length > 0) disponibles.push('verdad')
+    if (retoActivas.length > 0) disponibles.push('reto')
     if (disponibles.length === 0) return null
     tipo = disponibles[Math.floor(Math.random() * disponibles.length)]
   }
-  const lista = tipo === 'verdad' ? preguntasVerdad : preguntasReto
+  const lista = tipo === 'verdad' ? verdadActivas : retoActivas
   if (lista.length === 0) return null
-  const texto = lista[Math.floor(Math.random() * lista.length)]
-  return { tipo, texto }
+  const item = lista[Math.floor(Math.random() * lista.length)]
+  return { tipo, texto: item.texto }
 }
 
 const OPCIONES_MODO = [
@@ -89,8 +100,8 @@ export default function App() {
   const [seleccionado, setSeleccionado] = useState(null)
 
   const [modo, setModo] = useState(cargarModoGuardado)
-  const [preguntasVerdad, setPreguntasVerdad] = useState(() => cargarListaGuardada(CLAVE_VERDAD, PREGUNTAS_VERDAD_POR_DEFECTO))
-  const [preguntasReto, setPreguntasReto] = useState(() => cargarListaGuardada(CLAVE_RETO, RETOS_POR_DEFECTO))
+  const [preguntasVerdad, setPreguntasVerdad] = useState(() => cargarPreguntasGuardadas(CLAVE_VERDAD, PREGUNTAS_VERDAD_POR_DEFECTO))
+  const [preguntasReto, setPreguntasReto] = useState(() => cargarPreguntasGuardadas(CLAVE_RETO, RETOS_POR_DEFECTO))
   const [preguntaActual, setPreguntaActual] = useState(null)
   const [mostrarConfig, setMostrarConfig] = useState(false)
   const [nuevaVerdad, setNuevaVerdad] = useState('')
@@ -146,11 +157,19 @@ export default function App() {
     e.preventDefault()
     const texto = nuevaVerdad.trim()
     if (!texto) return
-    setPreguntasVerdad((prev) => [...prev, texto])
+    setPreguntasVerdad((prev) => [...prev, { texto, papelera: false }])
     setNuevaVerdad('')
   }
 
-  function quitarVerdad(indice) {
+  function moverVerdadAPapelera(indice) {
+    setPreguntasVerdad((prev) => prev.map((p, i) => (i === indice ? { ...p, papelera: true } : p)))
+  }
+
+  function restaurarVerdad(indice) {
+    setPreguntasVerdad((prev) => prev.map((p, i) => (i === indice ? { ...p, papelera: false } : p)))
+  }
+
+  function eliminarVerdadDefinitivo(indice) {
     setPreguntasVerdad((prev) => prev.filter((_, i) => i !== indice))
   }
 
@@ -158,11 +177,19 @@ export default function App() {
     e.preventDefault()
     const texto = nuevoReto.trim()
     if (!texto) return
-    setPreguntasReto((prev) => [...prev, texto])
+    setPreguntasReto((prev) => [...prev, { texto, papelera: false }])
     setNuevoReto('')
   }
 
-  function quitarReto(indice) {
+  function moverRetoAPapelera(indice) {
+    setPreguntasReto((prev) => prev.map((p, i) => (i === indice ? { ...p, papelera: true } : p)))
+  }
+
+  function restaurarReto(indice) {
+    setPreguntasReto((prev) => prev.map((p, i) => (i === indice ? { ...p, papelera: false } : p)))
+  }
+
+  function eliminarRetoDefinitivo(indice) {
     setPreguntasReto((prev) => prev.filter((_, i) => i !== indice))
   }
 
@@ -189,7 +216,17 @@ export default function App() {
     }, DURACION_MS)
   }
 
+  // Vuelve a sortear la pregunta/reto sin tocar al participante elegido
+  // ni volver a girar la botella.
+  function cambiarPregunta() {
+    setPreguntaActual(elegirPregunta(modo, preguntasVerdad, preguntasReto))
+  }
+
   const puedeGirar = participantes.length >= 2 && !girando
+  const verdadActivas = preguntasVerdad.filter((p) => !p.papelera)
+  const verdadEnPapelera = preguntasVerdad.filter((p) => p.papelera)
+  const retoActivas = preguntasReto.filter((p) => !p.papelera)
+  const retoEnPapelera = preguntasReto.filter((p) => p.papelera)
 
   return (
     <div className="relative flex min-h-svh flex-col items-center gap-6 px-4 py-8 text-white">
@@ -332,6 +369,13 @@ export default function App() {
           ) : (
             <p className="max-w-xs text-xs text-white/50">Agregá preguntas en ⚙️ Configuración para que aparezcan acá.</p>
           )}
+          <button
+            type="button"
+            onClick={cambiarPregunta}
+            className="rounded-xl border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-bold text-white/80 transition-transform active:scale-95"
+          >
+            🔀 Cambiar pregunta
+          </button>
         </div>
       )}
 
@@ -382,65 +426,153 @@ export default function App() {
               ))}
             </div>
 
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-sky-300">💭 Preguntas de Verdad</p>
-            <form onSubmit={agregarVerdad} className="mb-2 flex gap-2">
-              <input
-                type="text"
-                value={nuevaVerdad}
-                onChange={(e) => setNuevaVerdad(e.target.value)}
-                placeholder="Nueva pregunta"
-                className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/40 outline-none focus-visible:border-sky-400"
-              />
-              <button type="submit" className="shrink-0 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white">
-                +
-              </button>
-            </form>
-            <ul className="mb-5 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
-              {preguntasVerdad.map((texto, i) => (
-                <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/80">
-                  <span>{texto}</span>
-                  <button
-                    type="button"
-                    onClick={() => quitarVerdad(i)}
-                    aria-label={`Quitar pregunta: ${texto}`}
-                    className="shrink-0 text-white/40 hover:text-white"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-              {preguntasVerdad.length === 0 && <li className="text-xs text-white/40">No hay preguntas de verdad.</li>}
-            </ul>
+            <div className="mb-5">
+              <p className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-sky-300">
+                <span>💭 Preguntas de Verdad</span>
+                <span className="text-white/40">{verdadActivas.length}</span>
+              </p>
+              <form onSubmit={agregarVerdad} className="mb-2 flex gap-2">
+                <input
+                  type="text"
+                  value={nuevaVerdad}
+                  onChange={(e) => setNuevaVerdad(e.target.value)}
+                  placeholder="Nueva pregunta"
+                  className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/40 outline-none focus-visible:border-sky-400"
+                />
+                <button type="submit" className="shrink-0 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white">
+                  +
+                </button>
+              </form>
+              <ul className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                {preguntasVerdad.map(
+                  (p, i) =>
+                    !p.papelera && (
+                      <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/80">
+                        <span>{p.texto}</span>
+                        <button
+                          type="button"
+                          onClick={() => moverVerdadAPapelera(i)}
+                          aria-label={`Quitar pregunta: ${p.texto}`}
+                          className="shrink-0 text-white/40 hover:text-white"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ),
+                )}
+                {verdadActivas.length === 0 && <li className="text-xs text-white/40">No hay preguntas de verdad.</li>}
+              </ul>
 
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-rose-300">🔥 Retos</p>
-            <form onSubmit={agregarReto} className="mb-2 flex gap-2">
-              <input
-                type="text"
-                value={nuevoReto}
-                onChange={(e) => setNuevoReto(e.target.value)}
-                placeholder="Nuevo reto"
-                className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/40 outline-none focus-visible:border-rose-400"
-              />
-              <button type="submit" className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">
-                +
-              </button>
-            </form>
-            <ul className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
-              {preguntasReto.map((texto, i) => (
-                <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/80">
-                  <span>{texto}</span>
-                  <button
-                    type="button"
-                    onClick={() => quitarReto(i)}
-                    aria-label={`Quitar reto: ${texto}`}
-                    className="shrink-0 text-white/40 hover:text-white"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-              {preguntasReto.length === 0 && <li className="text-xs text-white/40">No hay retos.</li>}
-            </ul>
+              {verdadEnPapelera.length > 0 && (
+                <div className="mt-2 rounded-xl border border-white/10 bg-white/5 p-2">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40">
+                    🗑️ Papelera ({verdadEnPapelera.length})
+                  </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {preguntasVerdad.map(
+                      (p, i) =>
+                        p.papelera && (
+                          <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs">
+                            <span className="text-white/40 line-through">{p.texto}</span>
+                            <span className="flex shrink-0 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => restaurarVerdad(i)}
+                                aria-label={`Restaurar pregunta: ${p.texto}`}
+                                className="text-white/50 hover:text-white"
+                              >
+                                ↩️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => eliminarVerdadDefinitivo(i)}
+                                aria-label={`Eliminar para siempre: ${p.texto}`}
+                                className="text-rose-400 hover:text-rose-300"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          </li>
+                        ),
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-rose-300">
+                <span>🔥 Retos</span>
+                <span className="text-white/40">{retoActivas.length}</span>
+              </p>
+              <form onSubmit={agregarReto} className="mb-2 flex gap-2">
+                <input
+                  type="text"
+                  value={nuevoReto}
+                  onChange={(e) => setNuevoReto(e.target.value)}
+                  placeholder="Nuevo reto"
+                  className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/40 outline-none focus-visible:border-rose-400"
+                />
+                <button type="submit" className="shrink-0 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">
+                  +
+                </button>
+              </form>
+              <ul className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                {preguntasReto.map(
+                  (p, i) =>
+                    !p.papelera && (
+                      <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/80">
+                        <span>{p.texto}</span>
+                        <button
+                          type="button"
+                          onClick={() => moverRetoAPapelera(i)}
+                          aria-label={`Quitar reto: ${p.texto}`}
+                          className="shrink-0 text-white/40 hover:text-white"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ),
+                )}
+                {retoActivas.length === 0 && <li className="text-xs text-white/40">No hay retos.</li>}
+              </ul>
+
+              {retoEnPapelera.length > 0 && (
+                <div className="mt-2 rounded-xl border border-white/10 bg-white/5 p-2">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40">
+                    🗑️ Papelera ({retoEnPapelera.length})
+                  </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {preguntasReto.map(
+                      (p, i) =>
+                        p.papelera && (
+                          <li key={i} className="flex items-start justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs">
+                            <span className="text-white/40 line-through">{p.texto}</span>
+                            <span className="flex shrink-0 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => restaurarReto(i)}
+                                aria-label={`Restaurar reto: ${p.texto}`}
+                                className="text-white/50 hover:text-white"
+                              >
+                                ↩️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => eliminarRetoDefinitivo(i)}
+                                aria-label={`Eliminar para siempre: ${p.texto}`}
+                                className="text-rose-400 hover:text-rose-300"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          </li>
+                        ),
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
